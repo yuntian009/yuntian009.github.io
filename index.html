@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <link rel="stylesheet" href="css/Dashboard.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="http://d3js.org/d3.v5.min.js" charset="utf-8"></script>
+  <script src="https://unpkg.com/topojson@3.0.2/dist/topojson.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+  <!-- sidebar -->
+  <div id="info">
+    <div id="title">
+      <!-- Add a title -->
+      Crime Reporting Statistics <br/> by Yuntian Shi
+     </div>
+     <p id="placename">Golobal Safety Index</p>
+
+       <h5 id="desc"> Number of the countries: </h5>
+       <p id="county-count">118</p>
+      <div id="footer">Addressing exposure to crime
+and violence as a public health issue may help prevent and reduce the harms to individual and
+community health and well-being. So how can the government use our maps to reduce or prevent
+crime from happening? Using our maps, governments can find out if their country is in the high
+crime index range and use that to decide whether they need to increase security measures and
+allocate more funds to crime prevention initiatives or something else.</div>
+
+    <p id="placename">US Crimes in 2019</p>
+      <h5 id="desc"> Number of the states:</h5>
+      <p id="county-count">50</p>
+      <h5 id="desc">The Cases variable reflects all of the Property-related crimes, including burglaries, larcenies, and motor crimes.</h5>
+   </div>
+
+
+  <!-- mainwindow -->
+  <div id="map"></div>
+  <div id="tooltip">
+    <div id="tip-header"></div>
+    <div id="tip-body"></div>
+  </div>
+
+  <script>
+ var height = 600;
+ var width = 800;
+ var tipWidth = 200,
+        tipHeight = 200;
+
+  projection = d3.geoOrthographic()
+                .scale(200)
+                .translate([width/2, height/2])
+
+  var path = d3.geoPath().projection(projection);
+  var svg = d3.select("#map")
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+ var chart = d3.select("#tip-body")
+               .append("svg")
+               .attr('width', tipWidth).attr('height', tipHeight);
+
+
+
+      Promise.all([d3.json('data/world-110.json'),
+                     d3.csv('data/crime_index.csv'
+                   )]).then(function ready(loadData) {
+          //loading data
+          var world = loadData[0]                                                                                                         //1
+          var data = loadData[1]                                                                                                        //2
+          //organizing Data
+          var countries = topojson.feature(world, world.objects.ne_110m_admin_0_countries);  //3
+
+          var colorScale = d3.scaleSequential(d3.interpolateYlGn).domain([0, 100]);
+
+                var graticule = d3.geoGraticule();
+
+                var mapZoom = d3.zoom().on("zoom", zoomed);
+
+            //Orthographic should start out untranslated
+          var zoomSettings = d3.zoomIdentity
+              .translate(0, 0)
+              .scale(200);
+
+            //This scale will be used to transform for x-zoom to degrees
+          var rotateScale = d3.scaleLinear()
+                                .domain([-500, 0, 500])
+                                .range([-180, 0, 180]);
+
+
+
+                //code for organizing data goes here
+                var countries = topojson.feature(world, world.objects.ne_110m_admin_0_countries);  //3
+
+                var forest = d3.nest().key(function(d){return d.country}).map(data);                                  //4
+                var forestSorted = data.slice().sort(function(a,b){return d3.descending(+a.percent, +b.percent);})   //5
+                var countryList = forestSorted.map(d => d.country);                                                         //6
+                var forestbyCountry = new Map(data.map(d => [d.country, +d.percent]));                     //7
+                var forestbyCountrybyArea = new Map(data.map(d => [d.country, +d.area]));               //8
+
+
+
+                function buildBar(d) {
+                //    draw a chart
+                  var xScale = d3.scaleLinear().domain([0, 1]).range([0, tipWidth]);
+                  yScale = d3.scaleBand().domain(countryList).rangeRound([0, tipHeight]);
+
+                  chart.selectAll('.bar')
+                      .data(forestSorted)
+                      .enter().append('rect')
+                      .attr('class', 'bar')
+                      .attr('id', function(d) { return (d.country); })
+                      .attr('x', xScale(0))
+                      .attr('y', function(d) { return yScale(d.country); })
+                      .attr('width', function(d) { return xScale(d.percent); })
+                      .attr('height', yScale.bandwidth())
+                      .attr('fill', function(d){return colorScale(d.percent);});
+                  }
+
+                //function for mousehover event goes here
+              var hover = function(d) {
+              var div = document.getElementById('tooltip')
+              div.style.left = event.pageX +'px';
+              div.style.top = event.pageY + 'px';
+              d3.selectAll('path').style('stroke', 'transperent')
+              d3.select(this).style('stroke', 'grey').style('stroke-dasharray', ('3 3')).call(buildBar)
+              var divHead = document.getElementById('tip-header')
+              divHead.innerHTML =  '<h2>  '+d.properties.admin +'</h2>     <strong>Safety Index: '
+              + forestbyCountry.get(d.properties.admin) +'<br/>Crime Index: '
+              + forestbyCountrybyArea.get(d.properties.admin)
+              var divChart = document.getElementById('chart-body')
+              d3.select('#'+d.properties.admin).attr('fill','orange')
+           }
+  var out = function(d){
+              var div = document.getElementById('tooltip')
+              d3.select(this).transition().duration(500)
+                  .style('stroke', function(d){return 'transparent'});
+              d3.select('#'+d.properties.admin).attr('fill', function(d){return 'transparent'})
+                      }
+
+
+               // function for making a map goes here
+               svg.selectAll("path")
+               .data(countries.features)
+               .enter()
+               .append("path")
+               .attr("d", path)
+               .attr("class", "country")
+               .on("mouseover", hover)
+               .on("mouseout", out)
+               .style("fill", function (d) {return colorScale(forestbyCountry.get(d.properties.admin));})
+               .style("stroke", '#fff');
+
+               d3.select("svg").insert("path", "path.country")
+               .datum(graticule)
+               .attr("class", "graticule line")
+               .attr("d", path)
+               .attr("fill", "blue")
+
+               d3.select("svg").call(mapZoom).call(mapZoom.transform, zoomSettings).on("mouseover", hover)
+               .on("mouseout", out);
+
+
+               //function for zoom goes here
+               function zoomed() {
+                       var e = d3.event;
+                       var currentRotateX = rotateScale(e.transform.x) % 360;
+                //make the globe roll around up and down
+                       var currentRotateY = rotateScale(e.transform.y) % 360;
+
+                       projection.rotate([currentRotateX, currentRotateY])
+                               .scale(e.transform.k)
+                          d3.selectAll("path.graticule").attr("d", path);
+                          d3.selectAll("path.country").attr("d", path)
+                     }
+             });
+
+  </script>
+
+  <!-- mainwindow2 -->
+  <div id="map2">
+  <div id="tooltip2">
+
+  <script>
+  var height2 = 600;
+  var width2 = 900;
+
+  var projection2 = d3.geoAlbersUsa()
+             .scale(1070)
+             .translate([width2/2, height2/2]);
+
+  var path2 = d3.geoPath().projection(projection2);
+
+  var svg2 = d3.select("#map2")
+    .append("svg")
+    .attr("width", width2)
+    .attr("height", height2);
+
+  var color = d3.scaleLinear()
+      .domain([10000,50000,100000,200000,400000,600000,800000,1000000])
+      .range(['Pink','HotPink','PaleVioletRed','DeepPink','MediumVioletRed','Red','DarkRed','Black']);
+
+      var geoID = function(d) {
+                    return "c" + d.id;
+                    };
+
+      var hover2 = function(d) {
+                          var div = document.getElementById('tooltip2')
+                          div.style.left = event.pageX +'px';
+                          div.style.top = event.pageY + 'px';
+                          div.innerHTML = d.properties.name + "<br />" + "Cases: " + d.properties.density;
+                          d3.selectAll('path2').attr('stroke', 'transperent')
+                          d3.select(this).attr('stroke', 'grey');
+                        }
+
+      var out2 = function(d){
+                              d3.select(this).transition().duration(500).style('stroke', function(d){return 'transparent'});
+                              }
+
+
+                              d3.json('data/usState.geojson').then(function(data) {
+                              console.log('world', data);
+
+                              svg2.selectAll("path")
+                               .data(data.features)
+                               .enter()
+                               .append("path")
+                               .attr("d", path2)
+                               .attr('fill', function(d){return color(d.properties.density);})
+                               .attr('id', geoID)
+                               .on("mouseover", hover2)
+                               .on("mouseout", out2);
+                              });
+  </script>
+  </div>
+</div>
+
+<div id="chart3">
+  <script>
+  // set the dimensions and margins of the graph
+  var margin = {top: 20, right: 20, bottom: 140, left: 100},
+      width3 = 470 - margin.left - margin.right,
+      height3 = 450 - margin.top - margin.bottom;
+
+  // create svg element, respecting margins
+  var svg3 = d3.select("#chart3")
+             .append("svg")
+             .attr("width", width3 + margin.left + margin.right)
+             .attr("height", height3 + margin.top + margin.bottom)
+             .append("g")
+             .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+             // Add X axis label:
+                 svg3.append("text")
+                    .attr("text-anchor", "end")
+                    .attr("x", 340 )
+                    .attr("y", 330 )
+                    .style("fill", "white")
+                    .text("Safe index");
+
+             // Y axis label:
+                svg3.append("text")
+                   .attr("text-anchor", "end")
+                   .attr("transform", "rotate(-90)")
+                   .attr("y", -margin.left+70)
+                   .attr("x", -margin.top)
+                   .style("fill", "white")
+                   .text("Crime index");
+
+                   d3.csv("data/crime_index.csv").then (function(data) {
+                     console.log(data);
+
+
+                       var max_y = d3.max(data, function(d){return d.area});
+                       var min_y = d3.min(data, function(d){return d.area});
+
+                       console.log(max_y);
+                       console.log(min_y);
+
+                       var max_x = d3.max(data, function(d){return d.percent});
+                       var min_x = d3.min(data, function(d){return d.percent});
+
+                       var xAxis = d3.scaleLinear().domain([min_x, max_x]).range([0, width3]);
+                       var yAxis = d3.scaleLinear().domain([min_y, max_y]).range([height3, 0]);
+
+
+                       svg3.selectAll("circle")
+                          .data(data)
+                          .enter()
+                          .append("circle")
+                          .attr("cx", function(d) {return xAxis(d.percent);})
+                          .attr("cy", function(d) {return yAxis(d.area);})
+                          .attr("r", function(d) {return 3})
+                          .style("fill", "white")
+                          .style("stroke", "red")
+                          .style("stroke-width", "0.5px")
+
+                          svg3.append("g")
+                          .attr("transform", "translate(0,0)")
+                          .call(d3.axisLeft(yAxis));
+
+                          svg3.append("g")
+                          .attr("transform", "translate(0," + height3 + ")")
+                          .call(d3.axisBottom(xAxis));
+                      });
+
+        </script>
+</div>
+
+</body>
+</html>
